@@ -75,7 +75,7 @@ class ApplicationBuilder implements Serializable {
         def normalized = [:]
         raw.each { type, list ->
             normalized[type] = list.collect { item ->
-                item.collectEntries { k, v -> [(k): v.toString()] }
+                item instanceof Map ? item.collectEntries { k, v -> [(k): v.toString()] } : item
             }
         }
         return normalized
