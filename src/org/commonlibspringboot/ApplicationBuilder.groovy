@@ -7,10 +7,14 @@ class ApplicationBuilder implements Serializable {
 
     String repoName
     String appType
+    String appTypeKey
     String imageName
     String containerName
     String dockerPort
     String hostPort
+    String envStage
+    Map parsedMap
+    Map repoConfig
 
     ApplicationBuilder(steps) {
         this.steps = steps
@@ -26,12 +30,10 @@ class ApplicationBuilder implements Serializable {
         steps.echo "✅ Workspace cleaned."
     }
 
-    def initialize() {
+    void initialize() {
         try {
             def isWindows = !steps.isUnix()
-            if (!isWindows) {
-                steps.error("❌ This environment is intended for Windows only.")
-            }
+            if (!isWindows) steps.error("❌ This environment is intended for Windows only.")
 
             repoName = steps.params.REPO_NAME
             if (!repoName?.trim()) steps.error("❌ 'REPO_NAME' must be provided.")
@@ -39,20 +41,21 @@ class ApplicationBuilder implements Serializable {
             def configText = steps.libraryResource("common-repo-list.js")
             steps.writeFile(file: "common-repo-list.js", text: configText)
 
-            def parsedMap = parseAndNormalizeJson(configText)
-            def appTypeKey = findAppType(repoName, parsedMap)
+            parsedMap = parseAndNormalizeJson(configText)
+            appTypeKey = findAppType(repoName, parsedMap)
             if (!appTypeKey) steps.error("❌ Repository '${repoName}' not found.")
 
             appType = appTypeKey.toLowerCase()
-            def isEureka = (appType == 'eureka')
+            repoConfig = parsedMap[appTypeKey].find { it['repo-name'] == repoName }
 
+            def isEureka = (appType == 'eureka')
             hostPort = isEureka ? '8761' : findAvailablePort(9001, 9010)
             if (!hostPort) steps.error("❌ No available port found between 9001–9010.")
 
             imageName = "${repoName.toLowerCase()}-image"
             containerName = "${repoName.toLowerCase()}-container"
             dockerPort = isEureka ? '8761' : '8080'
-            def envStage = steps.params.ENV_STAGE ?: 'dev'
+            envStage = steps.params.ENV_STAGE ?: 'dev'
 
             steps.env.APP_TYPE = appType
             steps.env.PROJECT_DIR = repoName
@@ -67,44 +70,6 @@ class ApplicationBuilder implements Serializable {
         } catch (Exception e) {
             steps.error("❌ InitEnv failed: ${e.message ?: e.toString()}")
         }
-    }
-
-    @NonCPS
-    def parseAndNormalizeJson(String configText) {
-        def raw = new JsonSlurper().parseText(configText)
-        def normalized = [:]
-        raw.each { type, list ->
-            normalized[type] = list.collect { item ->
-                item instanceof Map ? item.collectEntries { k, v -> [(k): v.toString()] } : item
-            }
-        }
-        return normalized
-    }
-
-    @NonCPS
-    def findAppType(String repoName, Map parsedMap) {
-        parsedMap.find { type, repos ->
-            repos.find { it['repo-name'] == repoName }
-        }?.key
-    }
-
-    String findAvailablePort(int start, int end) {
-        def isWindows = !steps.isUnix()
-
-        for (int port = start; port <= end; port++) {
-            def cmd = isWindows
-                ? "netstat -an | findstr :${port}"
-                : "netstat -an | grep :${port}"
-
-            def status = isWindows
-                ? steps.bat(script: cmd, returnStatus: true)
-                : steps.sh(script: cmd, returnStatus: true)
-
-            if (status != 0) {
-                return port.toString()
-            }
-        }
-        return null
     }
 
     void checkout(String branch = 'feature', int timeout = 20) {
@@ -302,6 +267,25 @@ class ApplicationBuilder implements Serializable {
         return lines[-1]?.trim()
     }
 
+    @NonCPS
+    def parseAndNormalizeJson(String configText) {
+        def raw = new JsonSlurper().parseText(configText)
+        def normalized = [:]
+        raw.each { type, list ->
+            normalized[type] = list.collect { item ->
+                item instanceof Map ? item.collectEntries { k, v -> [(k): v.toString()] } : item
+            }
+        }
+        return normalized
+    }
+
+    @NonCPS
+    def findAppType(String repoName, Map parsedMap) {
+        parsedMap.find { type, repos ->
+            repos.find { it['repo-name'] == repoName }
+        }?.key
+    }
+
     private String getHealthEndpoint(String appType) {
         switch (appType?.toLowerCase()) {
             case 'springboot': return "/actuator/health"
@@ -314,5 +298,24 @@ class ApplicationBuilder implements Serializable {
                 steps.echo "⚠️ Unknown app type '${appType}', defaulting to root endpoint"
                 return "/"
         }
+    }
+
+    String findAvailablePort(int start, int end) {
+        def isWindows = !steps.isUnix()
+
+        for (int port = start; port <= end; port++) {
+            def cmd = isWindows
+                ? "netstat -an | findstr :${port}"
+                : "netstat -an | grep :${port}"
+
+            def status = isWindows
+                ? steps.bat(script: cmd, returnStatus: true)
+                : steps.sh(script: cmd, returnStatus: true)
+
+            if (status != 0) {
+                return port.toString()
+            }
+        }
+        return null
     }
 }
