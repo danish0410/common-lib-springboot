@@ -111,15 +111,13 @@ class ApplicationBuilder implements Serializable {
         steps.checkout([
             $class: 'GitSCM',
             branches: [[name: "*/${branch}"]],
-            doGenerateSubmoduleConfigurations: false,
             extensions: [
-                [$class: 'CloneOption', timeout: timeout, shallow: false, noTags: false, reference: '', depth: 0],
+                [$class: 'CloneOption', timeout: timeout, shallow: false],
                 [$class: 'RelativeTargetDirectory', relativeTargetDir: "target-repo/${repoName}"]
             ],
             userRemoteConfigs: [[
-                url: "git@github.com:thani2808/${repoName}.git",
-                credentialsId: 'private-key-jenkins',
-                refspec: "+refs/heads/${branch}:refs/remotes/origin/${branch}"
+                url: repoConfig["git-url"],
+                credentialsId: repoConfig["git_credentials_id"]
             ]]
         ])
     }
