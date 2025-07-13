@@ -230,10 +230,10 @@ class ApplicationBuilder implements Serializable {
             docker volume ls --format "{{.Name}}" | findstr "^mysql-db-data$" >nul || docker volume create mysql-db-data
 
             echo "🚀 Starting fresh MySQL container on host port 3306"
-            docker run -d --name mysql-db ^
-                --network spring-net ^
-                -e MYSQL_ROOT_PASSWORD=Thani@01 ^
-                -v mysql-db-data:/var/lib/mysql ^
+            docker run -d --name mysql-db ^\
+                --network spring-net ^\
+                -e MYSQL_ROOT_PASSWORD=Thani@01 ^\
+                -v mysql-db-data:/var/lib/mysql ^\
                 mysql:8
         '''
         runCommand(shellScript)
